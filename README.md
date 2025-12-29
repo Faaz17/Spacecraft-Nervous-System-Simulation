@@ -83,8 +83,8 @@ This project simulates a **Quantum-IoT Hybrid Network for Spacecraft Decision Sy
 | Folder | Contents |
 |--------|----------|
 | `Quantum IoT Network Simulation Vanshika/` | Vanshika's hardware simulation (Steps 1-2) |
-| `Quantum IoT Network Simulation Varenya/` | Varenya's hardware simulation (Steps 1-4) |
-| `ai_models/` | Trained AI models (anomaly_detector.pt, ppo_spacecraft.zip) |
+| `Quantum IoT Network Simulation Varenya/` | Varenya's hardware simulation (Steps 3-4) |
+| `ai_models/` | Faaz's Trained AI models (anomaly_detector.pt, ppo_spacecraft.zip)(steps 5-6) |
 
 ---
 
@@ -495,7 +495,7 @@ streamlit run app.py
 - Pipeline diagram visualization
 
 **Data Sources Available:**
-- 🎲 Mock Data (Generated)
+- 🎲 Faaz - Mock Data (Generated) 
 - 📡 Varenya - Steps 1-2: Raw Sensors
 - 🌡️ Varenya - Step 3: Environmental Disturbances
 - 📟 Varenya - Step 4: ADC Output
@@ -628,7 +628,7 @@ streamlit run app.py
 ## 👥 Team
 
 - **Hardware Simulation:** Vanshika & Varenya (MATLAB)
-- **Software Stack:** Signal Processing & Decision Engine (Python)
+- **Software Stack:** Signal Processing & Decision Engine (Python) by Faaz
 
 ---
 
