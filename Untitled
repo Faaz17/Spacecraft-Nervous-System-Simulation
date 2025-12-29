@@ -1,0 +1,156 @@
+import gymnasium as gym
+from gymnasium import spaces
+import numpy as np
+
+class SpacecraftEnv(gym.Env):
+    """
+    Optimized Environment for Spacecraft Decision Making.
+    Focus: Intelligent switching between energy conservation and protection.
+    """
+    metadata = {'render.modes': ['human']}
+
+    def __init__(self, max_steps=1000, initial_health=100.0, initial_energy=100.0):
+        super(SpacecraftEnv, self).__init__()
+        
+        # Parameters
+        self.max_steps = max_steps
+        self.initial_health = initial_health
+        self.initial_energy = initial_energy
+        
+        # --- CALIBRATED PHYSICS ---
+        # We increase the recharge vs cost gap to force the agent to "rest"
+        self.passive_recharge = 0.2  # Faster recharge
+        self.SHIELD_COST = 0.4       # More expensive shielding
+        self.THRUSTER_COST = 1.2     
+        self.RAD_DAMAGE = 10.0       # Significant damage to discourage idling during spikes
+        
+        # Action Space: 0=Nothing, 1=Shield, 2=Thruster
+        self.action_space = spaces.Discrete(3)
+        self.action_names = {0: "Do Nothing", 1: "Shield", 2: "Thruster"}
+        
+        # Observation Space: [Signal, Health, Energy, Recon_Error]
+        # Note: high for error increased to 10.0 to capture anomaly magnitude
+        self.observation_space = spaces.Box(
+            low=np.array([-5.0, 0.0, 0.0, 0.0]), 
+            high=np.array([5.0, 100.0, 100.0, 10.0]), 
+            dtype=np.float32
+        )
+        
+        # Data Placeholders
+        self.signal_data = np.array([])
+        self.error_data = np.array([])
+        self.threshold = 0.1
+        
+        self.reset()
+
+    def set_data(self, fused_signal, anomaly_flags, reconstruction_errors, anomaly_threshold):
+        """Used by the orchestrator to load simulation data."""
+        self.signal_data = fused_signal
+        self.error_data = reconstruction_errors
+        self.threshold = anomaly_threshold
+        self.max_steps = len(fused_signal)
+        self.reset()
+
+    def reset(self, seed=None, options=None):
+        super().reset(seed=seed)
+        self.current_step = 0
+        self.health = self.initial_health
+        self.energy = self.initial_energy
+        
+        # Tracking history for visualization
+        self.history = {'health': [], 'energy': [], 'actions': [], 'rewards': []}
+        
+        return self._get_obs(), {}
+
+    def _get_obs(self):
+        if len(self.signal_data) == 0:
+            return np.array([0.0, 100.0, 100.0, 0.0], dtype=np.float32)
+
+        idx = min(self.current_step, len(self.signal_data) - 1)
+        return np.array([
+            self.signal_data[idx], 
+            self.health, 
+            self.energy, 
+            self.error_data[idx]
+        ], dtype=np.float32)
+
+    def step(self, action):
+        reward = 0.0
+        
+        # --- 1. PHYSICS: ENERGY DYNAMICS ---
+        if action == 1:   # Shield
+            self.energy -= self.SHIELD_COST
+        elif action == 2: # Thruster
+            self.energy -= self.THRUSTER_COST
+        else:             # Idle/Nothing
+            self.energy += self.passive_recharge
+            
+        self.energy = np.clip(self.energy, 0, 100)
+
+        # --- 2. PHYSICS: ANOMALY CHECK ---
+        idx = min(self.current_step, len(self.error_data) - 1)
+        is_anomaly = self.error_data[idx] > self.threshold
+        
+        # --- 3. REWARD LOGIC (The "Brain" of the AI) ---
+        if is_anomaly:
+            # SUCESSFUL DEFENSE
+            if action == 1: 
+                reward += 4.0   # Large reward for shielding when needed
+            elif action == 2: 
+                reward += 1.0   # Thrusters are a secondary "okay" defense
+            else:
+                # FAILED DEFENSE
+                self.health -= self.RAD_DAMAGE
+                reward -= 10.0  # Massive penalty for taking damage
+        else:
+            # ENERGY CONSERVATION MODE
+            if action == 0:
+                reward += 2.0   # Reward for being brave and saving power
+            elif action == 1:
+                reward -= 5.0   # STEEP penalty for shielding when SAFE (Fixes "Always Shielding")
+            else:
+                reward -= 6.0   # Penalty for wasting thrusters
+        
+        # Survival Bonus: Encourage the agent to stay alive as long as possible
+        reward += 0.5 
+        
+        self.health = np.clip(self.health, 0, 100)
+        
+        # Record for telemetry
+        self.history['actions'].append(int(action))
+        self.history['rewards'].append(reward)
+        self.history['health'].append(self.health)
+        self.history['energy'].append(self.energy)
+        
+        # --- 4. TERMINATION ---
+        # Game over if critical systems fail
+        terminated = (self.health <= 0) or (self.energy <= 0)
+        
+        self.current_step += 1
+        truncated = (self.current_step >= self.max_steps - 1)
+        
+        info = {
+            'health': self.health, 
+            'energy': self.energy, 
+            'anomaly': is_anomaly,
+            'step': self.current_step
+        }
+        
+        return self._get_obs(), reward, terminated, truncated, info
+
+    def get_episode_stats(self):
+        """Aggregates data for the final visualization pie chart and metrics."""
+        actions = self.history.get('actions', [])
+        unique, counts = np.unique(actions, return_counts=True)
+        action_counts = dict(zip(unique, counts))
+        
+        return {
+            'steps_survived': self.current_step,
+            'final_health': self.health,
+            'total_reward': sum(self.history.get('rewards', [])), 
+            'actions_taken': {
+                'nothing': action_counts.get(0, 0),
+                'shield': action_counts.get(1, 0),
+                'thruster': action_counts.get(2, 0)
+            }
+        }
