@@ -63,12 +63,12 @@ class Config:
     ANOMALY_WINDOW_SIZE = 15
     ANOMALY_LATENT_DIM = 6
     
-    # Physics (MUST match rl_env.py!)
+    # Physics - Realistic energy management (more challenging!)
     INITIAL_HEALTH = 100.0
     INITIAL_ENERGY = 100.0
-    PASSIVE_RECHARGE = 0.5
-    SHIELD_COST = 0.1
-    THRUSTER_COST = 1.0
+    PASSIVE_RECHARGE = 0.15    # Slow recharge (was 0.5)
+    SHIELD_COST = 0.5          # Expensive shield (was 0.1)
+    THRUSTER_COST = 1.5        # Very expensive thruster
     RAD_DAMAGE = 5.0
     
     # Paths
