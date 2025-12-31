@@ -427,12 +427,12 @@ def create_final_dashboard(results, config):
     
     # Set up the figure with dark theme
     plt.style.use('dark_background')
-    fig = plt.figure(figsize=(18, 14))
+    fig = plt.figure(figsize=(16, 12))
     fig.patch.set_facecolor('#0d1117')
     
-    # Create grid layout
-    gs = GridSpec(5, 3, figure=fig, height_ratios=[1.2, 1, 1, 0.8, 0.5], 
-                  hspace=0.35, wspace=0.25)
+    # Create grid layout - 5 rows, more vertical spacing
+    gs = GridSpec(5, 1, figure=fig, height_ratios=[1, 1, 1, 0.8, 0.6], 
+                  hspace=0.45)
     
     # Color palette
     colors = {
@@ -452,11 +452,9 @@ def create_final_dashboard(results, config):
     }
     
     # =========================================================================
-    # ROW 1: SENSOR SIGNALS (spans 2 columns) + STATS PANEL
+    # ROW 1: SENSOR SIGNALS WITH MINI STATS
     # =========================================================================
-    
-    # Sensor comparison plot
-    ax1 = fig.add_subplot(gs[0, :2])
+    ax1 = fig.add_subplot(gs[0])
     ax1.set_facecolor('#161b22')
     
     ax1.plot(t, results['classical'], color=colors['classical'], alpha=0.5, 
@@ -468,51 +466,30 @@ def create_final_dashboard(results, config):
     ax1.plot(t, results['ground_truth'], color=colors['ground_truth'],
              linewidth=1.5, linestyle='--', alpha=0.8, label='Ground Truth')
     
-    ax1.set_title('🛰️ REAL HARDWARE SENSOR DATA → FUSED SIGNAL', 
-                  fontsize=14, fontweight='bold', color='white', pad=10)
-    ax1.set_ylabel('Amplitude', color='white')
+    ax1.set_title('REAL HARDWARE SENSOR DATA - FUSED SIGNAL', 
+                  fontsize=12, fontweight='bold', color='white', pad=15)
+    ax1.set_ylabel('Amplitude', color='white', fontsize=10)
     ax1.legend(loc='upper right', facecolor='#21262d', edgecolor='#30363d',
-               labelcolor='white', fontsize=9)
+               labelcolor='white', fontsize=8)
     ax1.set_xlim(t[0], t[-1])
     ax1.grid(True, alpha=0.2, color='#30363d')
-    ax1.tick_params(colors='white')
+    ax1.tick_params(colors='white', labelsize=9)
     
-    # Stats panel
-    ax_stats = fig.add_subplot(gs[0, 2])
-    ax_stats.set_facecolor('#161b22')
-    ax_stats.axis('off')
-    
-    stats_text = f"""
-╔══════════════════════════════════╗
-║     MISSION STATISTICS           ║
-╠══════════════════════════════════╣
-║  Data Source:                    ║
-║    {results['source'][:30]:30s} ║
-║                                  ║
-║  Samples Processed: {stats['total_samples']:>12,} ║
-║  Steps Survived:    {stats['survived']:>12,} ║
-║                                  ║
-║  Final Health:      {stats['final_health']:>10.1f}%  ║
-║  Final Energy:      {stats['final_energy']:>10.1f}%  ║
-║  Total Reward:      {stats['total_reward']:>12.1f} ║
-║                                  ║
-║  Anomalies Detected:{stats['anomaly_count']:>11,} ║
-║                                  ║
-║  Fusion Quality:                 ║
-║    RMSE: {results['quality']['rmse']:>8.4f}             ║
-║    Corr: {results['quality']['correlation']:>8.4f}             ║
-╚══════════════════════════════════╝
-"""
-    ax_stats.text(0.05, 0.95, stats_text, transform=ax_stats.transAxes,
-                  fontsize=10, fontfamily='monospace', color='#58a6ff',
-                  verticalalignment='top',
-                  bbox=dict(boxstyle='round,pad=0.5', facecolor='#0d1117', 
-                           edgecolor='#30363d', alpha=0.9))
+    # Mini stats box in top-left corner (inside the plot)
+    stats_text = (f"Health: {stats['final_health']:.0f}% | "
+                  f"Energy: {stats['final_energy']:.0f}% | "
+                  f"Survived: {stats['survived']:,}/{stats['total_samples']:,} | "
+                  f"Reward: {stats['total_reward']:.0f}")
+    ax1.text(0.02, 0.95, stats_text, transform=ax1.transAxes,
+             fontsize=8, fontfamily='monospace', color='#58a6ff',
+             verticalalignment='top',
+             bbox=dict(boxstyle='round,pad=0.3', facecolor='#0d1117', 
+                      edgecolor='#30363d', alpha=0.85))
     
     # =========================================================================
     # ROW 2: ANOMALY DETECTION
     # =========================================================================
-    ax2 = fig.add_subplot(gs[1, :])
+    ax2 = fig.add_subplot(gs[1])
     ax2.set_facecolor('#161b22')
     
     # Plot reconstruction error
@@ -527,19 +504,19 @@ def create_final_dashboard(results, config):
         if danger_mask[i]:
             ax2.axvspan(t[i], t[i+1], alpha=0.15, color=colors['danger'], linewidth=0)
     
-    ax2.set_title('🧠 AUTOENCODER ANOMALY DETECTION', 
-                  fontsize=14, fontweight='bold', color='white', pad=10)
-    ax2.set_ylabel('Reconstruction Error', color='white')
+    ax2.set_title('AUTOENCODER ANOMALY DETECTION', 
+                  fontsize=12, fontweight='bold', color='white', pad=15)
+    ax2.set_ylabel('Recon. Error', color='white', fontsize=10)
     ax2.legend(loc='upper right', facecolor='#21262d', edgecolor='#30363d',
-               labelcolor='white', fontsize=9)
+               labelcolor='white', fontsize=8)
     ax2.set_xlim(t[0], t[-1])
     ax2.grid(True, alpha=0.2, color='#30363d')
-    ax2.tick_params(colors='white')
+    ax2.tick_params(colors='white', labelsize=9)
     
     # =========================================================================
     # ROW 3: SPACECRAFT STATE (Health & Energy)
     # =========================================================================
-    ax3 = fig.add_subplot(gs[2, :])
+    ax3 = fig.add_subplot(gs[2])
     ax3.set_facecolor('#161b22')
     
     health_arr = np.array(history['health'])
@@ -555,20 +532,20 @@ def create_final_dashboard(results, config):
     ax3.axhline(y=50, color='#ffa657', linestyle=':', alpha=0.5, label='Warning Level')
     ax3.axhline(y=20, color=colors['danger'], linestyle=':', alpha=0.5, label='Critical Level')
     
-    ax3.set_title('💚 SPACECRAFT SYSTEM STATUS', 
-                  fontsize=14, fontweight='bold', color='white', pad=10)
-    ax3.set_ylabel('Percentage (%)', color='white')
+    ax3.set_title('SPACECRAFT SYSTEM STATUS', 
+                  fontsize=12, fontweight='bold', color='white', pad=15)
+    ax3.set_ylabel('Percentage (%)', color='white', fontsize=10)
     ax3.set_ylim(-5, 105)
-    ax3.legend(loc='lower left', facecolor='#21262d', edgecolor='#30363d',
-               labelcolor='white', fontsize=9)
+    ax3.legend(loc='lower right', facecolor='#21262d', edgecolor='#30363d',
+               labelcolor='white', fontsize=8)
     ax3.set_xlim(t[0], t[-1])
     ax3.grid(True, alpha=0.2, color='#30363d')
-    ax3.tick_params(colors='white')
+    ax3.tick_params(colors='white', labelsize=9)
     
     # =========================================================================
     # ROW 4: AI ACTIONS TIMELINE
     # =========================================================================
-    ax4 = fig.add_subplot(gs[3, :])
+    ax4 = fig.add_subplot(gs[3])
     ax4.set_facecolor('#161b22')
     
     actions = np.array(history['actions'])
@@ -593,7 +570,7 @@ def create_final_dashboard(results, config):
             ax4.plot([t[i], t[i+1]], [2.8, 2.8], color=colors['danger'], linewidth=3)
     
     ax4.set_yticks([0.5, 1.5, 2.5])
-    ax4.set_yticklabels(['IDLE', 'SHIELD', 'THRUSTER'], fontsize=10, color='white')
+    ax4.set_yticklabels(['IDLE', 'SHIELD', 'THRUSTER'], fontsize=9, color='white')
     ax4.set_ylim(0, 3)
     ax4.set_xlim(t[0], t[-1])
     
@@ -605,18 +582,17 @@ def create_final_dashboard(results, config):
         Patch(facecolor=colors['danger'], alpha=0.8, label="Danger Zone")
     ]
     ax4.legend(handles=legend_elements, loc='upper right', facecolor='#21262d', 
-               edgecolor='#30363d', labelcolor='white', fontsize=9)
+               edgecolor='#30363d', labelcolor='white', fontsize=8)
     
-    ax4.set_title('🤖 PPO AGENT AUTONOMOUS DECISIONS', 
-                  fontsize=14, fontweight='bold', color='white', pad=10)
-    ax4.set_xlabel('Time (seconds)', color='white', fontsize=11)
+    ax4.set_title('PPO AGENT AUTONOMOUS DECISIONS', 
+                  fontsize=12, fontweight='bold', color='white', pad=15)
     ax4.grid(True, axis='x', alpha=0.2, color='#30363d')
-    ax4.tick_params(colors='white')
+    ax4.tick_params(colors='white', labelsize=9)
     
     # =========================================================================
     # ROW 5: REWARD PROGRESSION
     # =========================================================================
-    ax5 = fig.add_subplot(gs[4, :])
+    ax5 = fig.add_subplot(gs[4])
     ax5.set_facecolor('#161b22')
     
     cumulative_reward = np.cumsum(history['rewards'])
@@ -628,28 +604,28 @@ def create_final_dashboard(results, config):
     ax5.plot(t, cumulative_reward, color='white', linewidth=1.5)
     ax5.axhline(y=0, color='white', linestyle='-', alpha=0.3)
     
-    ax5.set_title('📈 CUMULATIVE REWARD (AI Performance)', 
-                  fontsize=12, fontweight='bold', color='white', pad=8)
-    ax5.set_xlabel('Time (seconds)', color='white', fontsize=11)
-    ax5.set_ylabel('Reward', color='white')
+    ax5.set_title('CUMULATIVE REWARD (AI Performance)', 
+                  fontsize=12, fontweight='bold', color='white', pad=15)
+    ax5.set_xlabel('Time (seconds)', color='white', fontsize=10)
+    ax5.set_ylabel('Reward', color='white', fontsize=10)
     ax5.set_xlim(t[0], t[-1])
     ax5.grid(True, alpha=0.2, color='#30363d')
-    ax5.tick_params(colors='white')
+    ax5.tick_params(colors='white', labelsize=9)
     
     # =========================================================================
     # MAIN TITLE
     # =========================================================================
     fig.suptitle(
-        '🛰️ QUANTUM-IoT SPACECRAFT NERVOUS SYSTEM\n'
-        'Real Hardware Data + Trained AI Integration Demo',
-        fontsize=18, fontweight='bold', color='white', y=0.98
+        'QUANTUM-IoT SPACECRAFT NERVOUS SYSTEM\n'
+        'Real Hardware Data + Trained AI Integration',
+        fontsize=14, fontweight='bold', color='white', y=0.98
     )
     
     # Save and show
-    plt.tight_layout(rect=[0, 0.02, 1, 0.95])
-    plt.savefig(config.OUTPUT_FILE, dpi=200, facecolor='#0d1117', 
+    plt.tight_layout(rect=[0, 0.02, 1, 0.94])
+    plt.savefig(config.OUTPUT_FILE, dpi=150, facecolor='#0d1117', 
                 edgecolor='none', bbox_inches='tight')
-    print(f"  ✓ Dashboard saved to: {config.OUTPUT_FILE}")
+    print(f"  [OK] Dashboard saved to: {config.OUTPUT_FILE}")
     
     plt.show()
 
