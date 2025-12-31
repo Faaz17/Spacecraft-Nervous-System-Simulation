@@ -168,6 +168,68 @@ def run_final_integration(data_source='varenya', stage='adc'):
     print(f"  ✓ Fusion Correlation: {quality['correlation']:.4f}")
     print(f"  ✓ Anomalies Rejected: {len(fusion_result.anomaly_indices)}")
     
+    # -------------------------------------------------------------------------
+    # SIGNAL-TO-NOISE RATIO (SNR) ANALYSIS
+    # -------------------------------------------------------------------------
+    # Calculate noise as difference from ground truth
+    classical_noise = data.classical - data.ground_truth
+    quantum_noise = data.quantum - data.ground_truth
+    classical_filtered_noise = classical_filtered - data.ground_truth
+    quantum_filtered_noise = quantum_filtered - data.ground_truth
+    fused_noise = fused_signal - data.ground_truth
+    
+    # Signal power (ground truth variance)
+    signal_power = np.var(data.ground_truth)
+    
+    # Noise power (variance of noise)
+    classical_noise_power = np.var(classical_noise)
+    quantum_noise_power = np.var(quantum_noise)
+    classical_filtered_noise_power = np.var(classical_filtered_noise)
+    quantum_filtered_noise_power = np.var(quantum_filtered_noise)
+    fused_noise_power = np.var(fused_noise)
+    
+    # SNR in dB: SNR = 10 * log10(signal_power / noise_power)
+    def calc_snr_db(noise_power):
+        if noise_power > 0:
+            return 10 * np.log10(signal_power / noise_power)
+        return float('inf')
+    
+    snr_classical_raw = calc_snr_db(classical_noise_power)
+    snr_quantum_raw = calc_snr_db(quantum_noise_power)
+    snr_classical_filtered = calc_snr_db(classical_filtered_noise_power)
+    snr_quantum_filtered = calc_snr_db(quantum_filtered_noise_power)
+    snr_fused = calc_snr_db(fused_noise_power)
+    
+    # Noise reduction percentage
+    classical_noise_reduction = 100 * (1 - classical_filtered_noise_power / classical_noise_power) if classical_noise_power > 0 else 0
+    quantum_noise_reduction = 100 * (1 - quantum_filtered_noise_power / quantum_noise_power) if quantum_noise_power > 0 else 0
+    
+    print(f"\n  --- Signal-to-Noise Ratio Analysis ---")
+    print(f"  Classical Sensor:")
+    print(f"    Raw SNR:      {snr_classical_raw:>8.2f} dB")
+    print(f"    Filtered SNR: {snr_classical_filtered:>8.2f} dB")
+    print(f"    Noise Reduction: {classical_noise_reduction:>5.1f}%")
+    print(f"  Quantum Sensor:")
+    print(f"    Raw SNR:      {snr_quantum_raw:>8.2f} dB")
+    print(f"    Filtered SNR: {snr_quantum_filtered:>8.2f} dB")
+    print(f"    Noise Reduction: {quantum_noise_reduction:>5.1f}%")
+    print(f"  Fused Signal:")
+    print(f"    SNR:          {snr_fused:>8.2f} dB")
+    
+    # Store SNR data for visualization
+    snr_data = {
+        'classical_raw': snr_classical_raw,
+        'classical_filtered': snr_classical_filtered,
+        'quantum_raw': snr_quantum_raw,
+        'quantum_filtered': snr_quantum_filtered,
+        'fused': snr_fused,
+        'classical_noise_reduction': classical_noise_reduction,
+        'quantum_noise_reduction': quantum_noise_reduction,
+        'classical_noise': classical_noise,
+        'quantum_noise': quantum_noise,
+        'fused_noise': fused_noise
+    }
+    
     # Normalize fused signal to match training distribution (mean=0, similar amplitude)
     # Training data was sin waves oscillating around 0 with amplitude ~1.5
     fused_mean = np.mean(fused_signal)
@@ -389,11 +451,14 @@ def run_final_integration(data_source='varenya', stage='adc'):
         'quantum': data.quantum[:survived],
         'ground_truth': data.ground_truth[:survived],
         'fused_signal': fused_signal[:survived],
+        'classical_filtered': classical_filtered[:survived],
+        'quantum_filtered': quantum_filtered[:survived],
         'history': history,
         'detector': detector,
         'full_errors': normalized_errors[:survived],
         'threshold': dynamic_threshold,
         'quality': quality,
+        'snr_data': snr_data,
         'stats': {
             'survived': survived,
             'total_samples': n_samples,
@@ -416,7 +481,7 @@ def run_final_integration(data_source='varenya', stage='adc'):
 # =============================================================================
 
 def create_final_dashboard(results, config):
-    """Create a comprehensive, beautiful visualization dashboard."""
+    """Create a comprehensive visualization dashboard with LIGHT THEME."""
     
     # Extract data
     t = results['time']
@@ -424,176 +489,247 @@ def create_final_dashboard(results, config):
     errors = results['full_errors']
     threshold = results['threshold']
     stats = results['stats']
+    snr = results['snr_data']
     
-    # Set up the figure with dark theme
-    plt.style.use('dark_background')
-    fig = plt.figure(figsize=(16, 12))
-    fig.patch.set_facecolor('#0d1117')
+    # Set up the figure with LIGHT theme
+    plt.style.use('seaborn-v0_8-whitegrid')
     
-    # Create grid layout - 5 rows, more vertical spacing
-    gs = GridSpec(5, 1, figure=fig, height_ratios=[1, 1, 1, 0.8, 0.6], 
-                  hspace=0.45)
+    # Force legends to be completely opaque
+    plt.rcParams['legend.framealpha'] = 1.0
+    plt.rcParams['legend.facecolor'] = 'white'
+    plt.rcParams['legend.edgecolor'] = '#444444'
     
-    # Color palette
+    fig = plt.figure(figsize=(18, 24))
+    fig.patch.set_facecolor('#ffffff')
+    
+    # Create grid layout - 6 rows with proper spacing
+    gs = GridSpec(6, 2, figure=fig, height_ratios=[1.0, 0.7, 1.0, 1.0, 0.7, 0.5], 
+                  hspace=0.50, wspace=0.25, top=0.95, bottom=0.04)
+    
+    # Color palette for light theme
     colors = {
-        'signal': '#58a6ff',
-        'classical': '#f97583',
-        'quantum': '#7ee787',
-        'fused': '#d2a8ff',
-        'ground_truth': '#ffa657',
-        'health': '#3fb950',
-        'energy': '#58a6ff',
-        'danger': '#f85149',
-        'safe': '#238636',
-        'shield': '#f0e68c',
-        'thruster': '#ff6b6b',
-        'idle': '#6e7681',
-        'error': '#bc8cff'
+        'classical': '#e74c3c',      # Red
+        'quantum': '#27ae60',        # Green
+        'fused': '#9b59b6',          # Purple
+        'ground_truth': '#f39c12',   # Orange
+        'health': '#2ecc71',         # Light green
+        'energy': '#3498db',         # Blue
+        'danger': '#e74c3c',         # Red
+        'safe': '#27ae60',           # Green
+        'shield': '#f1c40f',         # Yellow
+        'thruster': '#e74c3c',       # Red
+        'idle': '#95a5a6',           # Gray
+        'error': '#8e44ad',          # Purple
+        'text': '#2c3e50',           # Dark blue-gray
+        'grid': '#ecf0f1'            # Light gray
     }
     
     # =========================================================================
-    # ROW 1: SENSOR SIGNALS WITH MINI STATS
+    # ROW 1: SENSOR SIGNALS (Full width)
     # =========================================================================
-    ax1 = fig.add_subplot(gs[0])
-    ax1.set_facecolor('#161b22')
+    ax1 = fig.add_subplot(gs[0, :])
+    ax1.set_facecolor('#fafafa')
     
-    ax1.plot(t, results['classical'], color=colors['classical'], alpha=0.5, 
-             linewidth=0.5, label='Classical (Noisy)')
-    ax1.plot(t, results['quantum'], color=colors['quantum'], alpha=0.5,
-             linewidth=0.5, label='Quantum (Precise)')
+    ax1.plot(t, results['classical'], color=colors['classical'], alpha=0.6, 
+             linewidth=0.8, label='Classical Sensor (Noisy)')
+    ax1.plot(t, results['quantum'], color=colors['quantum'], alpha=0.6,
+             linewidth=0.8, label='Quantum Sensor (Precise)')
     ax1.plot(t, results['fused_signal'], color=colors['fused'], 
-             linewidth=1.5, label='Fused Signal')
+             linewidth=2, label='Fused Signal')
     ax1.plot(t, results['ground_truth'], color=colors['ground_truth'],
-             linewidth=1.5, linestyle='--', alpha=0.8, label='Ground Truth')
+             linewidth=2, linestyle='--', alpha=0.9, label='Ground Truth')
     
-    ax1.set_title('REAL HARDWARE SENSOR DATA - FUSED SIGNAL', 
-                  fontsize=12, fontweight='bold', color='white', pad=15)
-    ax1.set_ylabel('Amplitude', color='white', fontsize=10)
-    ax1.legend(loc='upper right', facecolor='#21262d', edgecolor='#30363d',
-               labelcolor='white', fontsize=8)
+    ax1.set_title('Sensor Fusion Result', 
+                  fontsize=10, fontweight='bold', color=colors['text'], pad=5)
+    ax1.set_ylabel('Amplitude', color=colors['text'], fontsize=11)
+    legend1 = ax1.legend(loc='upper left', bbox_to_anchor=(1.01, 1), fontsize=7,
+                         framealpha=1.0, fancybox=False, facecolor='white', 
+                         edgecolor='#444444', borderaxespad=0)
+    legend1.get_frame().set_linewidth(1.0)
     ax1.set_xlim(t[0], t[-1])
-    ax1.grid(True, alpha=0.2, color='#30363d')
-    ax1.tick_params(colors='white', labelsize=9)
+    ax1.grid(True, alpha=0.4)
+    ax1.tick_params(labelsize=9)
+    ax1.tick_params(axis='x', labelbottom=False)  # Hide x-axis labels
     
-    # Mini stats box in top-left corner (inside the plot)
+    # Mini stats box
     stats_text = (f"Health: {stats['final_health']:.0f}% | "
                   f"Energy: {stats['final_energy']:.0f}% | "
                   f"Survived: {stats['survived']:,}/{stats['total_samples']:,} | "
                   f"Reward: {stats['total_reward']:.0f}")
     ax1.text(0.02, 0.95, stats_text, transform=ax1.transAxes,
-             fontsize=8, fontfamily='monospace', color='#58a6ff',
+             fontsize=9, fontfamily='monospace', color=colors['text'],
              verticalalignment='top',
-             bbox=dict(boxstyle='round,pad=0.3', facecolor='#0d1117', 
-                      edgecolor='#30363d', alpha=0.85))
+             bbox=dict(boxstyle='round,pad=0.3', facecolor='white', 
+                      edgecolor='#bdc3c7', alpha=0.95))
     
     # =========================================================================
-    # ROW 2: ANOMALY DETECTION
+    # ROW 2: SNR COMPARISON (Bar charts)
     # =========================================================================
-    ax2 = fig.add_subplot(gs[1])
-    ax2.set_facecolor('#161b22')
+    # Left: SNR Bar Chart
+    ax_snr = fig.add_subplot(gs[1, 0])
+    ax_snr.set_facecolor('#fafafa')
     
-    # Plot reconstruction error
+    # Short labels to prevent overlap
+    snr_labels = ['C-Raw', 'C-Filt', 'Q-Raw', 'Q-Filt', 'Fused']
+    snr_values = [snr['classical_raw'], snr['classical_filtered'], 
+                  snr['quantum_raw'], snr['quantum_filtered'], snr['fused']]
+    snr_colors = [colors['classical'], colors['classical'], 
+                  colors['quantum'], colors['quantum'], colors['fused']]
+    
+    x_pos = np.arange(len(snr_labels))
+    bars = ax_snr.bar(x_pos, snr_values, color=snr_colors, alpha=0.8, edgecolor='white', linewidth=1.5, width=0.6)
+    ax_snr.set_xticks(x_pos)
+    ax_snr.set_xticklabels(snr_labels, fontsize=8)
+    ax_snr.set_ylabel('SNR (dB)', fontsize=10, color=colors['text'])
+    ax_snr.set_title('Signal-to-Noise Ratio', fontsize=10, fontweight='bold', 
+                     color=colors['text'], pad=6)
+    ax_snr.tick_params(labelsize=9)
+    ax_snr.grid(True, axis='y', alpha=0.4)
+    
+    # Add value labels INSIDE the bars (centered)
+    for bar, val in zip(bars, snr_values):
+        # Position label inside bar, near the end
+        if val >= 0:
+            y_pos = bar.get_height() / 2
+        else:
+            y_pos = bar.get_height() / 2  # Middle of negative bar
+        ax_snr.text(bar.get_x() + bar.get_width()/2, y_pos, 
+                   f'{val:.1f}', ha='center', va='center', fontsize=8, fontweight='bold',
+                   color='white')
+    
+    # Right: Noise Reduction
+    ax_noise = fig.add_subplot(gs[1, 1])
+    ax_noise.set_facecolor('#fafafa')
+    
+    noise_labels = ['Classical', 'Quantum']
+    noise_values = [snr['classical_noise_reduction'], snr['quantum_noise_reduction']]
+    noise_colors = [colors['classical'], colors['quantum']]
+    
+    x_pos_noise = np.arange(len(noise_labels))
+    bars2 = ax_noise.bar(x_pos_noise, noise_values, color=noise_colors, alpha=0.8, 
+                         edgecolor='white', linewidth=1.5, width=0.4)
+    ax_noise.set_xticks(x_pos_noise)
+    ax_noise.set_xticklabels(noise_labels, fontsize=9)
+    ax_noise.set_ylabel('Reduction (%)', fontsize=10, color=colors['text'])
+    ax_noise.set_title('Noise Reduction (Low-Pass Filter)', fontsize=10, fontweight='bold',
+                       color=colors['text'], pad=6)
+    max_noise_val = max(noise_values) if max(noise_values) > 0 else 100
+    ax_noise.set_ylim(0, max_noise_val * 1.4)
+    ax_noise.tick_params(labelsize=9)
+    ax_noise.grid(True, axis='y', alpha=0.4)
+    
+    for bar, val in zip(bars2, noise_values):
+        ax_noise.text(bar.get_x() + bar.get_width()/2, bar.get_height() + (max_noise_val * 0.02), 
+                     f'{val:.1f}%', ha='center', va='bottom', fontsize=9, fontweight='bold',
+                     color=colors['text'])
+    
+    # =========================================================================
+    # ROW 3: ANOMALY DETECTION
+    # =========================================================================
+    ax2 = fig.add_subplot(gs[2, :])
+    ax2.set_facecolor('#fafafa')
+    
     ax2.fill_between(t, 0, errors, color=colors['error'], alpha=0.3)
-    ax2.plot(t, errors, color=colors['error'], linewidth=0.8, label='Reconstruction Error')
+    ax2.plot(t, errors, color=colors['error'], linewidth=1, label='Reconstruction Error')
     ax2.axhline(y=threshold, color=colors['danger'], linestyle='--', 
-                linewidth=2, label=f'Threshold ({threshold:.4f})')
+                linewidth=2, label=f'Danger Threshold ({threshold:.4f})')
     
-    # Highlight danger zones
     danger_mask = np.array(history['anomalies'])
     for i in range(len(t) - 1):
         if danger_mask[i]:
-            ax2.axvspan(t[i], t[i+1], alpha=0.15, color=colors['danger'], linewidth=0)
+            ax2.axvspan(t[i], t[i+1], alpha=0.2, color=colors['danger'], linewidth=0)
     
-    ax2.set_title('AUTOENCODER ANOMALY DETECTION', 
-                  fontsize=12, fontweight='bold', color='white', pad=15)
-    ax2.set_ylabel('Recon. Error', color='white', fontsize=10)
-    ax2.legend(loc='upper right', facecolor='#21262d', edgecolor='#30363d',
-               labelcolor='white', fontsize=8)
+    ax2.set_title('Autoencoder Anomaly Detection', 
+                  fontsize=11, fontweight='bold', color=colors['text'], pad=8)
+    ax2.set_ylabel('Reconstruction Error', color=colors['text'], fontsize=11)
+    legend2 = ax2.legend(loc='upper left', bbox_to_anchor=(1.01, 1), fontsize=7,
+                         framealpha=1.0, fancybox=False, facecolor='white',
+                         edgecolor='#444444', borderaxespad=0)
+    legend2.get_frame().set_linewidth(1.0)
     ax2.set_xlim(t[0], t[-1])
-    ax2.grid(True, alpha=0.2, color='#30363d')
-    ax2.tick_params(colors='white', labelsize=9)
+    ax2.grid(True, alpha=0.4)
+    ax2.tick_params(labelsize=9)
+    ax2.tick_params(axis='x', labelbottom=False)  # Hide x-axis labels
     
     # =========================================================================
-    # ROW 3: SPACECRAFT STATE (Health & Energy)
+    # ROW 4: SPACECRAFT STATE
     # =========================================================================
-    ax3 = fig.add_subplot(gs[2])
-    ax3.set_facecolor('#161b22')
+    ax3 = fig.add_subplot(gs[3, :])
+    ax3.set_facecolor('#fafafa')
     
     health_arr = np.array(history['health'])
     energy_arr = np.array(history['energy'])
     
     ax3.fill_between(t, 0, health_arr, color=colors['health'], alpha=0.3)
-    ax3.plot(t, health_arr, color=colors['health'], linewidth=2, label='Health')
+    ax3.plot(t, health_arr, color=colors['health'], linewidth=2.5, label='Health')
     
     ax3.fill_between(t, 0, energy_arr, color=colors['energy'], alpha=0.2)
-    ax3.plot(t, energy_arr, color=colors['energy'], linewidth=2, label='Energy')
+    ax3.plot(t, energy_arr, color=colors['energy'], linewidth=2.5, label='Energy')
     
-    # Add danger threshold lines
-    ax3.axhline(y=50, color='#ffa657', linestyle=':', alpha=0.5, label='Warning Level')
-    ax3.axhline(y=20, color=colors['danger'], linestyle=':', alpha=0.5, label='Critical Level')
+    ax3.axhline(y=50, color='#e67e22', linestyle=':', alpha=0.7, linewidth=1.5, label='Warning Level')
+    ax3.axhline(y=20, color=colors['danger'], linestyle=':', alpha=0.7, linewidth=1.5, label='Critical Level')
     
-    ax3.set_title('SPACECRAFT SYSTEM STATUS', 
-                  fontsize=12, fontweight='bold', color='white', pad=15)
-    ax3.set_ylabel('Percentage (%)', color='white', fontsize=10)
+    ax3.set_title('Spacecraft System Status', 
+                  fontsize=11, fontweight='bold', color=colors['text'], pad=8)
+    ax3.set_ylabel('Percentage (%)', color=colors['text'], fontsize=11)
     ax3.set_ylim(-5, 105)
-    ax3.legend(loc='lower right', facecolor='#21262d', edgecolor='#30363d',
-               labelcolor='white', fontsize=8)
+    legend3 = ax3.legend(loc='upper left', bbox_to_anchor=(1.01, 1), fontsize=7,
+                         framealpha=1.0, fancybox=False, facecolor='white',
+                         edgecolor='#444444', borderaxespad=0)
+    legend3.get_frame().set_linewidth(1.0)
     ax3.set_xlim(t[0], t[-1])
-    ax3.grid(True, alpha=0.2, color='#30363d')
-    ax3.tick_params(colors='white', labelsize=9)
+    ax3.grid(True, alpha=0.4)
+    ax3.tick_params(labelsize=9)
+    ax3.tick_params(axis='x', labelbottom=False)  # Hide x-axis labels
     
     # =========================================================================
-    # ROW 4: AI ACTIONS TIMELINE
+    # ROW 5: AI ACTIONS
     # =========================================================================
-    ax4 = fig.add_subplot(gs[3])
-    ax4.set_facecolor('#161b22')
+    ax4 = fig.add_subplot(gs[4, :])
+    ax4.set_facecolor('#fafafa')
     
     actions = np.array(history['actions'])
     
-    # Create colored regions for each action
     for i in range(len(t) - 1):
         action = actions[i]
         if action == 0:
-            color = colors['idle']
-            alpha = 0.3
+            color, alpha = colors['idle'], 0.4
         elif action == 1:
-            color = colors['shield']
-            alpha = 0.7
+            color, alpha = colors['shield'], 0.8
         else:
-            color = colors['thruster']
-            alpha = 0.9
+            color, alpha = colors['thruster'], 0.9
         ax4.axvspan(t[i], t[i+1], alpha=alpha, color=color, linewidth=0)
     
-    # Add danger overlay
     for i in range(len(t) - 1):
         if danger_mask[i]:
-            ax4.plot([t[i], t[i+1]], [2.8, 2.8], color=colors['danger'], linewidth=3)
+            ax4.plot([t[i], t[i+1]], [2.8, 2.8], color=colors['danger'], linewidth=4)
     
     ax4.set_yticks([0.5, 1.5, 2.5])
-    ax4.set_yticklabels(['IDLE', 'SHIELD', 'THRUSTER'], fontsize=9, color='white')
+    ax4.set_yticklabels(['IDLE', 'SHIELD', 'THRUSTER'], fontsize=10)
     ax4.set_ylim(0, 3)
     ax4.set_xlim(t[0], t[-1])
     
-    # Legend
     legend_elements = [
-        Patch(facecolor=colors['idle'], alpha=0.5, label=f"Idle ({stats['action_counts'][0]:,})"),
-        Patch(facecolor=colors['shield'], alpha=0.8, label=f"Shield ({stats['action_counts'][1]:,})"),
+        Patch(facecolor=colors['idle'], alpha=0.6, label=f"Idle ({stats['action_counts'][0]:,})"),
+        Patch(facecolor=colors['shield'], alpha=0.9, label=f"Shield ({stats['action_counts'][1]:,})"),
         Patch(facecolor=colors['thruster'], alpha=0.9, label=f"Thruster ({stats['action_counts'][2]:,})"),
-        Patch(facecolor=colors['danger'], alpha=0.8, label="Danger Zone")
+        Patch(facecolor=colors['danger'], alpha=0.9, label="Danger Zone")
     ]
-    ax4.legend(handles=legend_elements, loc='upper right', facecolor='#21262d', 
-               edgecolor='#30363d', labelcolor='white', fontsize=8)
-    
-    ax4.set_title('PPO AGENT AUTONOMOUS DECISIONS', 
-                  fontsize=12, fontweight='bold', color='white', pad=15)
-    ax4.grid(True, axis='x', alpha=0.2, color='#30363d')
-    ax4.tick_params(colors='white', labelsize=9)
+    legend4 = ax4.legend(handles=legend_elements, loc='upper left', bbox_to_anchor=(1.01, 1), 
+                         fontsize=7, framealpha=1.0, fancybox=False, facecolor='white',
+                         edgecolor='#444444', borderaxespad=0)
+    legend4.get_frame().set_linewidth(1.0)
+    ax4.set_title('PPO Agent Decisions', 
+                  fontsize=11, fontweight='bold', color=colors['text'], pad=8)
+    ax4.grid(True, axis='x', alpha=0.4)
+    ax4.tick_params(labelsize=9)
+    ax4.tick_params(axis='x', labelbottom=False)  # Hide x-axis labels
     
     # =========================================================================
-    # ROW 5: REWARD PROGRESSION
+    # ROW 6: CUMULATIVE REWARD
     # =========================================================================
-    ax5 = fig.add_subplot(gs[4])
-    ax5.set_facecolor('#161b22')
+    ax5 = fig.add_subplot(gs[5, :])
+    ax5.set_facecolor('#fafafa')
     
     cumulative_reward = np.cumsum(history['rewards'])
     
@@ -601,29 +737,36 @@ def create_final_dashboard(results, config):
                      where=cumulative_reward >= 0, color=colors['safe'], alpha=0.3)
     ax5.fill_between(t, 0, cumulative_reward,
                      where=cumulative_reward < 0, color=colors['danger'], alpha=0.3)
-    ax5.plot(t, cumulative_reward, color='white', linewidth=1.5)
-    ax5.axhline(y=0, color='white', linestyle='-', alpha=0.3)
+    ax5.plot(t, cumulative_reward, color=colors['text'], linewidth=2)
+    ax5.axhline(y=0, color=colors['text'], linestyle='-', alpha=0.3)
     
-    ax5.set_title('CUMULATIVE REWARD (AI Performance)', 
-                  fontsize=12, fontweight='bold', color='white', pad=15)
-    ax5.set_xlabel('Time (seconds)', color='white', fontsize=10)
-    ax5.set_ylabel('Reward', color='white', fontsize=10)
+    ax5.set_title('Cumulative Reward', 
+                  fontsize=11, fontweight='bold', color=colors['text'], pad=8)
+    ax5.set_xlabel('Time (seconds)', color=colors['text'], fontsize=12)
+    ax5.set_ylabel('Reward', color=colors['text'], fontsize=11)
     ax5.set_xlim(t[0], t[-1])
-    ax5.grid(True, alpha=0.2, color='#30363d')
-    ax5.tick_params(colors='white', labelsize=9)
+    ax5.grid(True, alpha=0.4)
+    ax5.tick_params(labelsize=9)
     
     # =========================================================================
     # MAIN TITLE
     # =========================================================================
     fig.suptitle(
-        'QUANTUM-IoT SPACECRAFT NERVOUS SYSTEM\n'
-        'Real Hardware Data + Trained AI Integration',
-        fontsize=14, fontweight='bold', color='white', y=0.98
+        'Quantum-IoT Spacecraft Nervous System',
+        fontsize=13, fontweight='bold', color=colors['text'], y=0.995
     )
     
-    # Save and show
-    plt.tight_layout(rect=[0, 0.02, 1, 0.94])
-    plt.savefig(config.OUTPUT_FILE, dpi=150, facecolor='#0d1117', 
+    # Manually adjust subplot positions - leave room for legends on right
+    plt.subplots_adjust(
+        left=0.06,
+        right=0.85,
+        top=0.96,
+        bottom=0.04,
+        hspace=0.45,
+        wspace=0.22
+    )
+    
+    plt.savefig(config.OUTPUT_FILE, dpi=150, facecolor='white', 
                 edgecolor='none', bbox_inches='tight')
     print(f"  [OK] Dashboard saved to: {config.OUTPUT_FILE}")
     

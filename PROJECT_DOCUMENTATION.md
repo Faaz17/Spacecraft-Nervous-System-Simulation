@@ -184,6 +184,45 @@ frequencies, magnitude_db = lpf.get_frequency_response()
 
 ---
 
+### 3.1 Signal-to-Noise Ratio (SNR) Analysis
+
+**Purpose:** Quantify the effectiveness of noise filtering
+
+**SNR Formula:**
+```
+SNR (dB) = 10 × log₁₀(Signal Power / Noise Power)
+
+Where:
+- Signal Power = Variance of Ground Truth
+- Noise Power = Variance of (Measured Signal - Ground Truth)
+```
+
+**How Filtering Improves SNR:**
+
+| Stage | Classical SNR | Quantum SNR |
+|-------|--------------|-------------|
+| Raw (before filter) | ~3-6 dB | ~20-25 dB |
+| After Low-Pass Filter | ~10-15 dB | ~25-30 dB |
+| Fused Signal | ~15-25 dB | - |
+
+**Noise Reduction Calculation:**
+```python
+noise_reduction_pct = 100 × (1 - filtered_noise_power / raw_noise_power)
+```
+
+**Why Low-Pass Filtering Works:**
+1. **Ground truth signal is low frequency** (~1-11 Hz structural vibration)
+2. **Noise is broadband** (spreads across all frequencies)
+3. **Cutting high frequencies** removes noise without losing signal
+4. **Result:** Higher SNR = cleaner signal for decision making
+
+**Typical Results:**
+- Classical sensor noise reduction: 40-60%
+- Quantum sensor noise reduction: 30-50%
+- Final fused signal correlation with ground truth: >0.99
+
+---
+
 ### 4. Sensor Fusion (`fusion.py`)
 
 **Purpose:** Intelligently combines classical and quantum sensors
